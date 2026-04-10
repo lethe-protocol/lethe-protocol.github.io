@@ -198,9 +198,9 @@ body {
   <!-- Tabs -->
   <div class="flex gap-8 mb-12">
     <button class="tab-btn active text-on-surface text-xs uppercase tracking-[0.15em] font-medium pb-3 cursor-pointer bg-transparent border-0" data-tab="poe">PoE Protocol</button>
-    <button class="tab-btn text-outline text-xs uppercase tracking-[0.15em] font-medium pb-3 cursor-pointer bg-transparent border-0 border-b border-transparent hover:text-on-surface-variant" data-tab="arch">Architecture (PoC)</button>
+    <button class="tab-btn text-outline text-xs uppercase tracking-[0.15em] font-medium pb-3 cursor-pointer bg-transparent border-0 border-b border-transparent hover:text-on-surface-variant" data-tab="arch">Architecture</button>
     <button class="tab-btn text-outline text-xs uppercase tracking-[0.15em] font-medium pb-3 cursor-pointer bg-transparent border-0 border-b border-transparent hover:text-on-surface-variant" data-tab="vision">Vision</button>
-    <button class="tab-btn text-outline text-xs uppercase tracking-[0.15em] font-medium pb-3 cursor-pointer bg-transparent border-0 border-b border-transparent hover:text-on-surface-variant" data-tab="api">API</button>
+    <button class="tab-btn text-outline text-xs uppercase tracking-[0.15em] font-medium pb-3 cursor-pointer bg-transparent border-0 border-b border-transparent hover:text-on-surface-variant" data-tab="api">Contracts</button>
   </div>
 
   <!-- ============================================================
@@ -211,46 +211,43 @@ body {
     <p>The cryptographic foundation of Lethe's verified destruction market.</p>
 
     <h3>Core Principle</h3>
-    <p><strong>The signature implies erasure.</strong> A valid ECDSA signature from a TEE-bound broker enclave key over <code>(auditId, codeHash, "ERASED")</code> constitutes cryptographic proof that the code was received, processed, audited, and destroyed.</p>
+    <p><strong>The transaction implies erasure.</strong> A TEE-signed transaction submitted via <code>roflEnsureAuthorizedOrigin()</code> on Oasis Sapphire constitutes cryptographic proof that the code was received, processed, audited, and destroyed inside an Intel TDX enclave. The TEE identity is verified on-chain by the Sapphire runtime itself.</p>
 
     <h3>Protocol Steps</h3>
     <div class="spec-step">
-      <b>1. Key Generation</b>
-      <p>Broker generates ECDSA key inside TEE enclave. Public key registered in <code>BrokerRegistry.sol</code>. Private key never leaves the enclave.</p>
+      <b>1. Bounty Creation</b>
+      <p>Requester deposits ROSE into <code>LetheMarket.sol</code> on Oasis Sapphire. Registers repo hash, audit configuration (trigger mode, scope), and GitHub repo info. All state is encrypted by default on Sapphire.</p>
     </div>
     <div class="spec-step">
-      <b>2. Audit Binding</b>
-      <p>Client submits code. <code>keccak256(code)</code> is computed, then <code>LetheEscrow.createAudit(codeHash)</code> creates an on-chain record. The <code>auditId</code> links to code hash immutably.</p>
+      <b>2. Polling &amp; Trigger</b>
+      <p>ROFL TEE worker polls <code>bountyCount()</code> and <code>getBounty()</code> on a configurable interval. Evaluates trigger conditions (ON_CHANGE: new commits, PERIODIC: elapsed time). Skips bounties that don't meet trigger criteria.</p>
     </div>
     <div class="spec-step">
-      <b>3. TEE Execution</b>
-      <p>Broker enclave receives code, runs static analysis, generates audit report, then performs NIST 800-88 erasure (3-pass: 0x00, 0xFF, random).</p>
+      <b>3. Clone &amp; Audit</b>
+      <p>TEE worker authenticates as a GitHub App (JWT + installation token, 1-hour expiry), clones the repository into ephemeral RAM storage, runs Semgrep static analysis. No network access during analysis. Creates a PR with findings on GitHub.</p>
     </div>
     <div class="spec-step">
-      <b>4. PoE Signing</b>
-      <p>Enclave signs <code>keccak256(abi.encodePacked(auditId, codeHash, "ERASED"))</code> with enclave private key. The ECDSA signature (r, s, v) is the PoE token.</p>
+      <b>4. Erasure</b>
+      <p>NIST 800-88 compliant 3-pass destruction (0x00, 0xFF, 0x00) of all source code in memory. A keccak256 commitment hash is generated over the erasure operation. Source code directory is deleted. This step MUST complete before PoE submission.</p>
     </div>
     <div class="spec-step">
-      <b>5. On-chain Verification</b>
-      <p><code>LetheEscrow.resolve()</code> recovers signer from signature + message. If signer matches registered broker, escrow is released. Trustless verification.</p>
+      <b>5. Proof of Erasure</b>
+      <p>TEE worker submits <code>submitAudit(bountyId, commitHash, poeHash, ruleVersion, payout)</code> via appd socket. The transaction is signed inside the TEE. Sapphire verifies TEE identity via <code>roflEnsureAuthorizedOrigin()</code>. Escrow is released automatically.</p>
     </div>
 
     <h3>Security Properties</h3>
     <ul>
-      <li><strong>Non-repudiation</strong> — Broker cannot deny a valid PoE signature</li>
-      <li><strong>Confidentiality</strong> — Code never leaves the TEE enclave in plaintext</li>
-      <li><strong>Verifiable destruction</strong> — NIST 800-88 multi-pass ensures data is unrecoverable</li>
-      <li><strong>Trustless</strong> — Anyone can verify PoE on-chain without trusting the broker</li>
-      <li><strong>Attestation</strong> — TEE remote attestation proves the enclave ran unmodified code</li>
+      <li><strong>Hardware attestation</strong> — Intel TDX memory encryption + ROFL attestation chain verified on Sapphire</li>
+      <li><strong>Confidentiality</strong> — Code never leaves the TEE. Sapphire state is encrypted by default</li>
+      <li><strong>Verifiable destruction</strong> — NIST 800-88 3-pass ensures data is unrecoverable</li>
+      <li><strong>Sequentiality guarantee</strong> — Erasure MUST complete before on-chain PoE submission. This ordering is enforced in code</li>
+      <li><strong>Ephemeral execution</strong> — RAM-only storage, no persistent disk. Each audit starts clean</li>
     </ul>
 
-    <h3>zkPoE v2</h3>
-    <p>For constant-time on-chain verification, Lethe implements a Groth16 zero-knowledge circuit that wraps the PoE verification. This allows O(1) gas cost verification regardless of audit complexity. The circuit proves knowledge of a valid PoE signature without revealing the signature itself.</p>
-
     <h3>Smart Contracts</h3>
-    <p><code>LetheEscrow.sol</code> — Escrow + audit lifecycle + PoE verification<br>
-    <code>BrokerRegistry.sol</code> — Broker registration + public key management + DCAP attestation<br>
-    Deployed on <strong>Base Sepolia</strong> (chainId: 84532)</p>
+    <p><code>LetheMarket.sol</code> — Confidential escrow + standing bounties + trigger modes + PoE verification<br>
+    <code>ReputationRegistry.sol</code> — Asymmetric scoring + circuit breaker (active/warning/suspended)<br>
+    Deployed on <strong>Oasis Sapphire testnet</strong></p>
   </div>
 
   <!-- ============================================================
@@ -258,57 +255,64 @@ body {
        ============================================================ -->
   <div id="tab-arch" class="tab-content prose">
     <h2>System Architecture</h2>
-    <div class="bg-surface-container-low inline-block px-3 py-1 rounded text-[10px] uppercase tracking-widest text-outline mb-4">Current Proof of Concept — Testnet</div>
-    <p>This is what runs today. A single-broker architecture on Base Sepolia testnet with simulated TEE. See the <strong>Vision</strong> tab for where this is going.</p>
+    <div class="bg-surface-container-low inline-block px-3 py-1 rounded text-[10px] uppercase tracking-widest text-outline mb-4">Oasis Sapphire + ROFL — Testnet</div>
+    <p>This is what runs today. Confidential smart contracts on Oasis Sapphire with a real Intel TDX TEE worker via ROFL (Runtime OFf-chain Logic). See the <strong>Vision</strong> tab for where this is going.</p>
 
     <!-- ASCII diagram styled for dark theme -->
     <div class="bg-surface-container-low p-6 md:p-8 rounded-lg my-8 overflow-x-auto">
       <pre class="text-xs md:text-sm text-on-surface-variant font-mono leading-relaxed" style="font-family: 'JetBrains Mono', monospace;"><span style="color:#a6acb2">
- ┌──────────┐     ┌────────────────┐     ┌─────────────────┐     ┌────────────────┐
- │</span><span style="color:#60A5FA"> Client   </span><span style="color:#a6acb2">│────▶│</span><span style="color:#4ADE80"> Broker         </span><span style="color:#a6acb2">│────▶│</span><span style="color:#c084fc"> TEE Enclave     </span><span style="color:#a6acb2">│────▶│</span><span style="color:#FBBF24"> Base Sepolia   </span><span style="color:#a6acb2">│
- │</span><span style="color:#60A5FA"> Browser  </span><span style="color:#a6acb2">│◀────│</span><span style="color:#4ADE80"> FastAPI        </span><span style="color:#a6acb2">│◀────│</span><span style="color:#c084fc"> Gramine/SGX    </span><span style="color:#a6acb2">│     │</span><span style="color:#FBBF24"> LetheEscrow    </span><span style="color:#a6acb2">│
- └──────────┘     └────────────────┘     └─────────────────┘     │</span><span style="color:#FBBF24"> BrokerRegistry </span><span style="color:#a6acb2">│
-                         │                       │                └────────────────┘
-                         ▼                       ▼
-                  ┌──────────────┐       ┌─────────────────┐
-                  │</span><span style="color:#c084fc"> Semgrep      </span><span style="color:#a6acb2">│       │</span><span style="color:#c084fc"> zkPoE v2       </span><span style="color:#a6acb2">│
-                  │</span><span style="color:#c084fc"> Scanner      </span><span style="color:#a6acb2">│       │</span><span style="color:#c084fc"> circom/snarkjs </span><span style="color:#a6acb2">│
-                  └──────────────┘       └─────────────────┘</span></pre>
+ ┌──────────────┐    ┌─────────────────────────────┐    ┌──────────────────┐
+ │</span><span style="color:#60A5FA"> Requester    </span><span style="color:#a6acb2">│───▶│</span><span style="color:#FBBF24">    Oasis Sapphire           </span><span style="color:#a6acb2">│    │</span><span style="color:#4ADE80">     GitHub       </span><span style="color:#a6acb2">│
+ │</span><span style="color:#60A5FA"> deposit ROSE </span><span style="color:#a6acb2">│    │</span><span style="color:#FBBF24">                             </span><span style="color:#a6acb2">│    │</span><span style="color:#4ADE80">   Private Repos  </span><span style="color:#a6acb2">│
+ │</span><span style="color:#60A5FA"> register repo</span><span style="color:#a6acb2">│    │</span><span style="color:#FBBF24">  LetheMarket.sol            </span><span style="color:#a6acb2">│    │                  │
+ └──────────────┘    │</span><span style="color:#FBBF24">  ReputationRegistry.sol     </span><span style="color:#a6acb2">│    └────────┬─────────┘
+                     └──────────────┬──────────────┘             │
+                                    │ roflEnsureAuthorizedOrigin  │ git clone
+                                    │ TEE-signed transactions     │ (installation token)
+                      ┌─────────────┴─────────────────────────────┴──────────┐
+                      │</span><span style="color:#c084fc">                  ROFL TEE (Intel TDX)                        </span><span style="color:#a6acb2">│
+                      │</span><span style="color:#c084fc">                                                              </span><span style="color:#a6acb2">│
+                      │</span><span style="color:#c084fc">  main.py ── Poll → Clone → Semgrep → PR → Erase → PoE       </span><span style="color:#a6acb2">│
+                      │</span><span style="color:#c084fc">  appd.py ── JSON-RPC (public) + CBOR/appd (TEE-gated)        </span><span style="color:#a6acb2">│
+                      │</span><span style="color:#c084fc">                                                              </span><span style="color:#a6acb2">│
+                      │</span><span style="color:#c084fc">  Source code exists ONLY here. Then destroyed.               </span><span style="color:#a6acb2">│
+                      └────────────────────────────────────────────────────────┘</span></pre>
     </div>
 
     <h3>Components</h3>
 
     <div class="spec-step">
-      <b>Client</b>
-      <p>Browser or application that submits code via HTTPS and receives real-time updates via WebSocket.</p>
+      <b>Oasis Sapphire</b>
+      <p>Confidential EVM. All contract state is encrypted by default. <code>LetheMarket</code> manages escrow, standing bounties, trigger modes, and repo registry. <code>ReputationRegistry</code> tracks performer scores with asymmetric penalties.</p>
     </div>
     <div class="spec-step">
-      <b>Broker (FastAPI)</b>
-      <p>Central orchestration service. Receives audit requests, manages lifecycle, coordinates with TEE enclaves. Exposes REST API and WebSocket endpoints.</p>
+      <b>ROFL TEE Worker (Intel TDX)</b>
+      <p>Runtime OFf-chain Logic container running on real Intel TDX hardware. 4GB RAM, 2 vCPU, ephemeral RAM storage. Boots, polls for bounties, executes audits, submits PoE. Identity verified on-chain via <code>roflEnsureAuthorizedOrigin()</code>.</p>
     </div>
     <div class="spec-step">
-      <b>TEE Enclave (Gramine/SGX)</b>
-      <p>Trusted Execution Environment where code analysis occurs. Currently runs as Docker simulation; production would use actual SGX or SEV hardware. Provides attestation quotes and sealed encryption keys.</p>
+      <b>appd Client</b>
+      <p>Hybrid query architecture. Public contract reads (bountyCount, getBounty) go via direct JSON-RPC. TEE-gated reads (getRepoInfo, getAuditConfig) go via appd CBOR-encoded queries. Write transactions go via appd UNIX socket with TEE-signed identity.</p>
     </div>
     <div class="spec-step">
       <b>Semgrep Scanner</b>
-      <p>Static analysis engine running inside the TEE enclave. Scans for vulnerabilities using pattern matching and rule evaluation.</p>
+      <p>Static analysis engine running inside the TEE. No network access during scan. Extensible rulesets (currently: security, owasp, javascript, typescript, python, solidity).</p>
     </div>
     <div class="spec-step">
-      <b>Bridge Service</b>
-      <p>Monitors on-chain events (AuditCreated), triggers broker, submits PoE to escrow for resolution.</p>
+      <b>GitHub App</b>
+      <p>Authenticates via JWT + installation token (1-hour expiry). Scoped to installed repos only. Clones private repositories, creates PRs with findings. Source code stays in TEE memory.</p>
     </div>
     <div class="spec-step">
-      <b>Base Sepolia Contracts</b>
-      <p><code>LetheEscrow</code> manages deposits and verifies PoE signatures. <code>BrokerRegistry</code> maintains broker public keys and attestation status. Chain ID: 84532.</p>
+      <b>Erasure Engine</b>
+      <p>NIST 800-88 3-pass destruction (0x00, 0xFF, 0x00) of all cloned source code. Generates keccak256 commitment hash. Must complete before PoE submission. Defense-in-depth cleanup on failure paths.</p>
     </div>
 
     <h3>Data Flow</h3>
-    <p><strong>1. Submit</strong> — Client sends code to <code>POST /audit/request</code>. Broker stores request, returns <code>audit_id</code>.<br><br>
-    <strong>2. Audit</strong> — Broker forwards code to TEE enclave. Semgrep runs inside enclave, generates findings.<br><br>
-    <strong>3. Erase</strong> — TEE performs NIST 800-88 compliant destruction (multi-pass zeroing).<br><br>
-    <strong>4. Prove</strong> — TEE signs <code>keccak256(audit_id, code_hash, "ERASED")</code> with enclave key. This signature is the Proof of Erasure.<br><br>
-    <strong>5. Settle</strong> — Bridge submits PoE to <code>LetheEscrow.resolve()</code>. On-chain contract recovers signer, verifies against registered broker, releases escrow.</p>
+    <p><strong>1. Bounty</strong> — Requester deposits ROSE into LetheMarket. Registers repo info and audit config (trigger mode, scope, period).<br><br>
+    <strong>2. Poll</strong> — TEE worker queries <code>bountyCount()</code> and <code>getBounty()</code> via JSON-RPC every 60 seconds. Evaluates trigger conditions (ON_CHANGE, PERIODIC).<br><br>
+    <strong>3. Clone</strong> — GitHub App JWT generates installation token. Worker clones repo into ephemeral RAM storage inside TEE.<br><br>
+    <strong>4. Audit</strong> — Semgrep runs inside TDX enclave. Findings formatted as PR body. Branch created, PR opened on GitHub.<br><br>
+    <strong>5. Erase</strong> — NIST 800-88 3-pass destruction of source directory. Commitment hash generated.<br><br>
+    <strong>6. Prove</strong> — <code>submitAudit(bountyId, commitHash, poeHash, ruleVersion, payout)</code> submitted via TEE-signed transaction. Sapphire verifies ROFL identity. Escrow released.</p>
   </div>
 
   <!-- ============================================================
@@ -317,23 +321,24 @@ body {
   <div id="tab-vision" class="tab-content prose">
     <h2>Vision Architecture</h2>
     <div class="bg-surface-container-low inline-block px-3 py-1 rounded text-[10px] uppercase tracking-widest text-outline mb-4">Open for Discussion — Help us build this</div>
-    <p>This is where Lethe is going. None of this is implemented yet. We are publishing this architecture openly so that security researchers, protocol engineers, and agent builders can challenge, refine, and contribute to these designs.</p>
+    <p>This is where Lethe is going. The core infrastructure — confidential escrow, TEE worker, Proof of Erasure — is deployed on Oasis Sapphire testnet. The designs below describe the full target architecture. We publish them openly so that security researchers, protocol engineers, and agent builders can challenge, refine, and contribute.</p>
     <p><strong>Discuss these proposals on <a href="https://github.com/lethe-protocol/lethe-market/discussions" target="_blank" style="color:#c3c7cb; text-decoration: underline;">GitHub Discussions</a>.</strong></p>
 
     <h3>1. Decentralized Performer Model</h3>
-    <p>The current PoC uses a single centralized broker. The target architecture replaces this with a competitive market of independent performers, each running their own TEE environment.</p>
+    <p>The current system runs a single ROFL TEE auditor on Oasis Sapphire. The target replaces this with a competitive market of independent performers, each running their own TEE environment.</p>
     <div class="bg-surface-container-low p-6 rounded-lg my-4 overflow-x-auto">
-      <pre class="text-xs text-on-surface-variant font-mono leading-relaxed" style="font-family: 'JetBrains Mono', monospace;"><span style="color:#a6acb2">Current:   Request → Broker (central) → Broker's TEE → Result
+      <pre class="text-xs text-on-surface-variant font-mono leading-relaxed" style="font-family: 'JetBrains Mono', monospace;"><span style="color:#a6acb2">Current:   Bounty → LetheMarket (Sapphire) → ROFL TEE auditor → On-chain PoE
+                                                (single performer)
 
-Target:    Request → Market (matching) → Performer's TEE → On-chain verification
-                                           ↑
-                                     Any TEE provider:
-                                     • Self-hosted SGX
-                                     • Phala Network (TDX)
-                                     • Marlin Oyster
-                                     • Oasis ROFL</span></pre>
+Target:    Bounty → LetheMarket (matching) → Performer's TEE → On-chain verification
+                                               ↑
+                                         Any TEE provider:
+                                         • Oasis ROFL (TDX) — current
+                                         • Self-hosted SGX/SEV
+                                         • Phala Network
+                                         • Marlin Oyster</span></pre>
     </div>
-    <p>Performers register by submitting a TEE attestation quote to <code>BrokerRegistry</code>. The market matches requests to performers via sealed-bid auction. Performers compete on price, speed, and reputation — not on privileged access.</p>
+    <p>Performers register by submitting a TEE attestation to the <code>ReputationRegistry</code>. The market matches bounties to performers via sealed-bid auction. Performers compete on price, speed, and reputation — not on privileged access.</p>
 
     <h3>2. Sealed-Bid Auction</h3>
     <p>When a requester submits an audit intent, qualified performers submit encrypted bids. After a designated window (e.g. 30 seconds), bids are revealed simultaneously. The market selects based on a combination of price, performer reputation, and specialization match.</p>
@@ -397,13 +402,14 @@ Circuit breaker:
     <h3>6. Domain Expansion</h3>
     <p>The escrow layer is designed to be domain-agnostic. The verification logic is a plugin. Expanding to new domains means writing a new verification plugin — not modifying the market infrastructure.</p>
     <div class="bg-surface-container-low p-6 rounded-lg my-4">
-      <pre class="text-xs text-on-surface-variant font-mono leading-relaxed" style="font-family: 'JetBrains Mono', monospace;"><span style="color:#a6acb2">Phase 1: Smart contract security audit (current)
-Phase 2: General code review
-Phase 3: Data integrity verification
-Phase 4: AI model security (adversarial robustness)
+      <pre class="text-xs text-on-surface-variant font-mono leading-relaxed" style="font-family: 'JetBrains Mono', monospace;"><span style="color:#a6acb2">Phase 1: Static analysis audit — Semgrep inside TEE (current)
+Phase 2: LLM-powered deep analysis — Ollama inside TEE (next)
+Phase 3: General code review
+Phase 4: Data integrity verification
+Phase 5: AI model security (adversarial robustness)
 
 Lower layer (domain-agnostic):
-  Escrow, matching, settlement, reputation
+  Confidential escrow, matching, settlement, reputation
 
 Upper layer (pluggable):
   Verification protocol per domain</span></pre>
@@ -431,83 +437,93 @@ Upper layer (pluggable):
        TAB: API
        ============================================================ -->
   <div id="tab-api" class="tab-content prose">
-    <h2>API Reference</h2>
-    <p>The Broker exposes a REST API and WebSocket endpoint for audit lifecycle management.</p>
+    <h2>Contract Interface</h2>
+    <p>Lethe's on-chain interface lives on Oasis Sapphire. All state is encrypted by default. TEE-gated functions require ROFL attestation.</p>
 
-    <h3>Base URL</h3>
-    <p><code>http://localhost:8000</code> (local) or your deployed broker endpoint.</p>
+    <h3>Deployments (Sapphire Testnet)</h3>
+    <div class="endpoint">
+      <div class="mb-2">
+        <span class="method method-post">CONTRACT</span>
+        <code>LetheMarket</code>
+      </div>
+      <p><code>0x56C5C2C44f7B688c1f134c8cdAd9af74F8d9e187</code></p>
+    </div>
+    <div class="endpoint">
+      <div class="mb-2">
+        <span class="method method-get">CONTRACT</span>
+        <code>ReputationRegistry</code>
+      </div>
+      <p><code>0xc792bff9c16cc4Be5e71Ea2E53C6dA8E7d0f3E9f</code></p>
+    </div>
 
-    <h3>Endpoints</h3>
+    <h3>LetheMarket — Public Functions</h3>
 
     <div class="endpoint">
       <div class="mb-2">
-        <span class="method method-post">POST</span>
-        <code>/audit/request</code>
+        <span class="method method-get">VIEW</span>
+        <code>bountyCount() → uint256</code>
       </div>
-      <p>Submit code for audit. Returns an <code>audit_id</code> for tracking.</p>
-      <p><strong>Body:</strong></p>
-      <div class="bg-surface-container-lowest p-4 rounded text-xs font-mono text-on-surface-variant my-2" style="font-family: 'JetBrains Mono', monospace;">
-{<br>
-&nbsp;&nbsp;"code": "def bad(): password = '123456'",<br>
-&nbsp;&nbsp;"language": "python"<br>
-}
-      </div>
-      <p><strong>Response:</strong> <code>{"audit_id": "aud-xxxx", "status": "pending"}</code></p>
+      <p>Total number of bounties created.</p>
     </div>
+    <div class="endpoint">
+      <div class="mb-2">
+        <span class="method method-get">VIEW</span>
+        <code>getBounty(uint256 id) → Bounty</code>
+      </div>
+      <p>Returns bounty details: requester, amount, repoHash, deadline, standing flag, state (Open/Completed/Cancelled), auditCount.</p>
+    </div>
+    <div class="endpoint">
+      <div class="mb-2">
+        <span class="method method-post">WRITE</span>
+        <code>createBounty(bytes32 repoHash, uint256 deadline, bool standing)</code>
+      </div>
+      <p>Create a new bounty with ROSE deposit. Standing bounties fund multiple audits from a single pool.</p>
+    </div>
+
+    <h3>LetheMarket — TEE-Gated Functions</h3>
+    <p>These require <code>roflEnsureAuthorizedOrigin()</code> — only callable from inside the registered ROFL TEE.</p>
 
     <div class="endpoint">
       <div class="mb-2">
-        <span class="method method-get">GET</span>
-        <code>/audit/status/{audit_id}</code>
+        <span class="method" style="background: rgba(192, 132, 252, 0.1); color: #c084fc;">TEE</span>
+        <code>getRepoInfo(uint256 id) → (string owner, string repo, uint256 installationId)</code>
       </div>
-      <p>Check audit status. Returns current state, findings (if complete), and PoE data.</p>
-      <p><strong>States:</strong> <code>pending</code> → <code>running</code> → <code>completed</code> → <code>erased</code></p>
+      <p>Repository details for cloning. Encrypted in Sapphire state, only accessible from TEE.</p>
     </div>
-
     <div class="endpoint">
       <div class="mb-2">
-        <span class="method method-ws">WS</span>
-        <code>/ws/audit/{audit_id}</code>
+        <span class="method" style="background: rgba(192, 132, 252, 0.1); color: #c084fc;">TEE</span>
+        <code>getAuditConfig(uint256 id) → (uint8 triggerMode, uint8 scopeMode, uint8 toolMode, uint256 periodDays)</code>
       </div>
-      <p>WebSocket for real-time audit progress. Receives status updates as the audit progresses through each stage.</p>
+      <p>Audit configuration. Trigger modes: ON_CHANGE (0x01), PERIODIC (0x08). Combinable via bitmask.</p>
     </div>
-
     <div class="endpoint">
       <div class="mb-2">
-        <span class="method method-post">POST</span>
-        <code>/audit/trigger</code>
+        <span class="method" style="background: rgba(192, 132, 252, 0.1); color: #c084fc;">TEE</span>
+        <code>submitAudit(uint256 bountyId, bytes32 commitHash, bytes32 poeHash, uint256 ruleVersion, uint256 payout)</code>
       </div>
-      <p>Manually trigger audit processing for a pending audit. Used by the bridge when on-chain events are detected.</p>
+      <p>Submit Proof of Erasure. Only callable by the registered ROFL app. Verifies TEE identity, records audit metadata, releases payout.</p>
     </div>
 
+    <h3>ReputationRegistry</h3>
     <div class="endpoint">
       <div class="mb-2">
-        <span class="method method-get">GET</span>
-        <code>/health</code>
+        <span class="method method-get">VIEW</span>
+        <code>getScore(address performer) → uint256</code>
       </div>
-      <p>Health check. Returns broker status and available TEE backends.</p>
+      <p>Current reputation score. Circuit breaker: &ge;50 ACTIVE, 30-49 WARNING, &lt;30 SUSPENDED.</p>
     </div>
 
-    <div class="endpoint">
-      <div class="mb-2">
-        <span class="method method-get">GET</span>
-        <code>/backends</code>
-      </div>
-      <p>List registered TEE backends and their attestation status (SGX, TDX, Mock).</p>
-    </div>
-
-    <h3>Quick Start</h3>
+    <h3>ROFL App</h3>
     <div class="bg-surface-container-low p-6 rounded-lg my-4">
-      <pre class="text-xs text-on-surface-variant font-mono leading-loose" style="font-family: 'JetBrains Mono', monospace;"><span style="color:#70767c"># Start broker</span>
-cd broker && uvicorn main:app --port 8000
+      <pre class="text-xs text-on-surface-variant font-mono leading-loose" style="font-family: 'JetBrains Mono', monospace;"><span style="color:#70767c"># App ID</span>
+rofl1qzym28lldy3a84a7r9y50h8x3q6gq9xgksh9ntra
 
-<span style="color:#70767c"># Submit audit</span>
-curl -X POST http://localhost:8000/audit/request \
-  -H "Content-Type: application/json" \
-  -d '{"code": "def bad(): password = \"123456\"", "language": "python"}'
+<span style="color:#70767c"># GitHub App</span>
+lethe-testnet (ID 3334976)
 
-<span style="color:#70767c"># Check status</span>
-curl http://localhost:8000/audit/status/aud-xxxx</pre>
+<span style="color:#70767c"># TEE specs</span>
+Intel TDX / 4GB RAM / 2 vCPU / RAM storage</pre>
     </div>
   </div>
 
