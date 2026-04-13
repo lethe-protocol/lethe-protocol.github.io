@@ -1,0 +1,58 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  repository_dispatch:
+    types: [docs-updated]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  sync-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch docs from lethe-market
+        uses: actions/checkout@v4
+        with:
+          repository: lethe-protocol/lethe-market
+          path: _market
+          sparse-checkout: |
+            docs/
+            ONBOARDING.md
+
+      - name: Sync docs to content directory
+        shell: bash
+        run: |
+          bash scripts/sync-docs.sh
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - run: npm install
+      - run: npm run build
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: sync-docs
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment

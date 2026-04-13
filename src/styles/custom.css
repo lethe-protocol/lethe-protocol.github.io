@@ -1,0 +1,29 @@
+/* pora — heliopora blue coral theme */
+
+:root {
+	--sl-color-accent-low: #0a2540;
+	--sl-color-accent: #00b4d8;
+	--sl-color-accent-high: #90e0ef;
+	--sl-color-white: #caf0f8;
+	--sl-color-gray-1: #e0f7fa;
+	--sl-color-gray-2: #b2ebf2;
+	--sl-color-gray-3: #80deea;
+	--sl-color-gray-4: #4dd0e1;
+	--sl-color-gray-5: #26c6da;
+	--sl-color-gray-6: #00838f;
+	--sl-color-black: #0a192f;
+}
+
+:root[data-theme='dark'] {
+	--sl-color-accent-low: #003459;
+	--sl-color-accent: #00b4d8;
+	--sl-color-accent-high: #90e0ef;
+	--sl-color-white: #caf0f8;
+	--sl-color-gray-1: #0d2137;
+	--sl-color-gray-2: #142d44;
+	--sl-color-gray-3: #1b3a52;
+	--sl-color-gray-4: #4a7c9b;
+	--sl-color-gray-5: #8bbbd4;
+	--sl-color-gray-6: #caf0f8;
+	--sl-color-black: #0a192f;
+}
