@@ -1,29 +1,119 @@
-/* pora — heliopora blue coral theme */
+/* pora — heliopora blue coral theme
+   Merging the previous lethe design aesthetic into Starlight:
+   - Newsreader (serif) + Inter (sans) typography
+   - Near-black background (#0c0e10)
+   - Coral blue accent (#00b4d8)
+   - Grain texture overlay
+   - Smooth fade-in animations
+*/
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Newsreader:ital,opsz,wght@0,6..72,200..800;1,6..72,200..800&display=swap');
+
+/* ── Starlight dark theme overrides ── */
 
 :root {
-	--sl-color-accent-low: #0a2540;
-	--sl-color-accent: #00b4d8;
-	--sl-color-accent-high: #90e0ef;
-	--sl-color-white: #caf0f8;
-	--sl-color-gray-1: #e0f7fa;
-	--sl-color-gray-2: #b2ebf2;
-	--sl-color-gray-3: #80deea;
-	--sl-color-gray-4: #4dd0e1;
-	--sl-color-gray-5: #26c6da;
-	--sl-color-gray-6: #00838f;
-	--sl-color-black: #0a192f;
-}
-
-:root[data-theme='dark'] {
+	--sl-font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+	--sl-font-system: var(--sl-font);
+	--sl-color-white: #e0e6ed;
+	--sl-color-gray-1: #c3c7cb;
+	--sl-color-gray-2: #a6acb2;
+	--sl-color-gray-3: #70767c;
+	--sl-color-gray-4: #42494e;
+	--sl-color-gray-5: #20262c;
+	--sl-color-gray-6: #111416;
+	--sl-color-black: #0c0e10;
 	--sl-color-accent-low: #003459;
 	--sl-color-accent: #00b4d8;
 	--sl-color-accent-high: #90e0ef;
-	--sl-color-white: #caf0f8;
-	--sl-color-gray-1: #0d2137;
-	--sl-color-gray-2: #142d44;
-	--sl-color-gray-3: #1b3a52;
-	--sl-color-gray-4: #4a7c9b;
-	--sl-color-gray-5: #8bbbd4;
-	--sl-color-gray-6: #caf0f8;
-	--sl-color-black: #0a192f;
+	--sl-color-bg-nav: rgba(12, 14, 16, 0.95);
+	--sl-color-bg-sidebar: rgba(12, 14, 16, 0.9);
+	--sl-color-hairline-light: #20262c;
+	--sl-color-hairline-shade: #111416;
+}
+
+[data-theme='light'] {
+	--sl-color-accent-low: #e0f7fa;
+	--sl-color-accent: #0097a7;
+	--sl-color-accent-high: #003459;
+}
+
+/* ── Typography ── */
+
+h1, h2, h3 {
+	font-family: 'Newsreader', Georgia, serif !important;
+	font-weight: 400;
+	letter-spacing: -0.01em;
+}
+
+.serif-italic {
+	font-family: 'Newsreader', serif;
+	font-style: italic;
+}
+
+/* ── Grain texture overlay ── */
+
+body::before {
+	content: '';
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	opacity: 0.03;
+	pointer-events: none;
+	z-index: 9999;
+	background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+}
+
+/* ── Smooth fade-in on content ── */
+
+.sl-markdown-content > * {
+	animation: fadeInUp 0.6s ease both;
+}
+
+.sl-markdown-content > *:nth-child(1) { animation-delay: 0s; }
+.sl-markdown-content > *:nth-child(2) { animation-delay: 0.05s; }
+.sl-markdown-content > *:nth-child(3) { animation-delay: 0.1s; }
+.sl-markdown-content > *:nth-child(4) { animation-delay: 0.15s; }
+.sl-markdown-content > *:nth-child(5) { animation-delay: 0.2s; }
+
+@keyframes fadeInUp {
+	from {
+		opacity: 0;
+		transform: translateY(12px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* ── Sidebar refinements ── */
+
+nav.sidebar {
+	backdrop-filter: blur(8px);
+}
+
+/* ── Blockquote styling (for taglines) ── */
+
+blockquote {
+	font-family: 'Newsreader', serif;
+	font-style: italic;
+	font-size: 1.15em;
+	border-left-color: var(--sl-color-accent);
+	color: var(--sl-color-gray-1);
+}
+
+/* ── Code blocks ── */
+
+pre {
+	border: 1px solid var(--sl-color-gray-4);
+	border-radius: 0.5rem;
+}
+
+/* ── Links ── */
+
+a {
+	text-decoration-thickness: 1px;
+	text-underline-offset: 2px;
 }
